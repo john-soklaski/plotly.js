@@ -483,12 +483,14 @@ drawing.makeTester = function(gd) {
 // always returns a copy of the bbox, so the caller can modify it safely
 var savedBBoxes = [],
     maxSavedBBoxes = 10000;
-drawing.bBox = function(node) {
+drawing.bBox = function(node, forceReCalc) {
     // cache elements we've already measured so we don't have to
     // remeasure the same thing many times
-    var saveNum = node.attributes['data-bb'];
-    if(saveNum && saveNum.value) {
-        return Plotly.Lib.extendFlat({}, savedBBoxes[saveNum.value]);
+    if(!forceReCalc) {
+        var saveNum = node.attributes['data-bb'];
+        if(saveNum && saveNum.value) {
+            return Plotly.Lib.extendFlat({}, savedBBoxes[saveNum.value]);
+        }
     }
 
     var test3 = d3.select('#js-plotly-tester'),

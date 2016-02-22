@@ -583,7 +583,7 @@ legend.repositionLegend = function(td, traces){
             tspans = g.selectAll('.legendtext>tspan'),
             tHeight = opts.font.size * 1.3,
             tLines = tspans[0].length||1,
-            tWidth = text.node() && Plotly.Drawing.bBox(text.node()).width,
+            tWidth = text.node() && Plotly.Drawing.bBox(text.node(), true).width,
             mathjaxGroup = g.select('g[class*=math-group]'),
             textY,
             tHeightFull;
