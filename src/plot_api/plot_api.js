@@ -116,14 +116,15 @@ Plotly.plot = function(gd, data, layout, config) {
         gd._replotPending = false;
     }
 
+    // so we don't try to re-call Plotly.plot from inside
+    // legend and colorbar, if margins changed
+    gd._replotting = true;
+    
     Plots.supplyDefaults(gd);
 
     // Polar plots
     if(data && data[0] && data[0].r) return plotPolar(gd, data, layout);
 
-    // so we don't try to re-call Plotly.plot from inside
-    // legend and colorbar, if margins changed
-    gd._replotting = true;
     var hasData = gd._fullData.length > 0;
 
     var subplots = Plotly.Axes.getSubplots(gd).join(''),
