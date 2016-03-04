@@ -169,6 +169,8 @@ module.exports = function draw(gd) {
                     newVisible = trace.visible === true ? 'legendonly' : true;
                     Plotly.restyle(gd, 'visible', newVisible, traceIndicesInGroup);
                 }
+                
+                td.emit('plotly_legend_toggle', trace);
             });
         });
 
