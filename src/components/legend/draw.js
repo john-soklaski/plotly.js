@@ -13,7 +13,6 @@ var d3 = require('d3');
 
 var Plotly = require('../../plotly');
 var Lib = require('../../lib');
-var setCursor = require('../../lib/setcursor');
 var Plots = require('../../plots/plots');
 var dragElement = require('../dragelement');
 var Drawing = require('../drawing');
@@ -175,7 +174,18 @@ module.exports = function draw(gd) {
         });
 
     // Position and size the legend
-    repositionLegend(gd, traces);
+    var lyMin = 0,
+        lyMax = fullLayout.height;
+
+    computeLegendDimensions(gd, traces);
+
+    if(opts.height > lyMax) {
+        // If the legend doesn't fit in the plot area,
+        // do not expand the vertical margins.
+        expandHorizontalMargin(gd);
+    } else {
+        expandMargin(gd);
+    }
 
     // Scroll section must be executed after repositionLegend.
     // It requires the legend width, height, x and y to position the scrollbox
@@ -187,81 +197,113 @@ module.exports = function draw(gd) {
     if(anchorUtils.isRightAnchor(opts)) {
         lx -= opts.width;
     }
-    if(anchorUtils.isCenterAnchor(opts)) {
+    else if(anchorUtils.isCenterAnchor(opts)) {
         lx -= opts.width / 2;
     }
 
     if(anchorUtils.isBottomAnchor(opts)) {
         ly -= opts.height;
     }
-    if(anchorUtils.isMiddleAnchor(opts)) {
+    else if(anchorUtils.isMiddleAnchor(opts)) {
         ly -= opts.height / 2;
     }
 
-    // Deal with scrolling
-    var plotHeight = fullLayout.height - fullLayout.margin.b,
-        scrollheight = Math.min(plotHeight - ly, opts.height),
-        scrollPosition = scrollBox.attr('data-scroll') ? scrollBox.attr('data-scroll') : 0;
+    // Make sure the legend top and bottom are visible
+    // (legends with a scroll bar are not allowed to stretch beyond the extended
+    // margins)
+    var legendHeight = opts.height,
+        legendHeightMax = gs.h;
+
+    if(legendHeight > legendHeightMax) {
+        ly = gs.t;
+        legendHeight = legendHeightMax;
+    }
+    else {
+        if(ly > lyMax) ly = lyMax - legendHeight;
+        if(ly < lyMin) ly = lyMin;
+        legendHeight = Math.min(lyMax - ly, opts.height);
+    }
+
+    // Set size and position of all the elements that make up a legend:
+    // legend, background and border, scroll box and scroll bar
+    legend.attr('transform', 'translate(' + lx + ',' + ly + ')');
+
+    bg.attr({
+        width: opts.width - opts.borderwidth,
+        height: legendHeight - opts.borderwidth,
+        x: opts.borderwidth / 2,
+        y: opts.borderwidth / 2
+    });
+
+    var scrollPosition = scrollBox.attr('data-scroll') || 0;
 
     scrollBox.attr('transform', 'translate(0, ' + scrollPosition + ')');
 
-    bg.attr({
+    clipPath.select('rect').attr({
         width: opts.width - 2 * opts.borderwidth,
-        height: scrollheight - 2 * opts.borderwidth,
-        x: opts.borderwidth,
+        height: legendHeight - 2 * opts.borderwidth,
+        x: opts.borderwidth - scrollPosition,
         y: opts.borderwidth
     });
 
-    legend.attr('transform', 'translate(' + lx + ',' + ly + ')');
-
-    clipPath.select('rect').attr({
-        width: opts.width,
-        height: scrollheight,
-        x: 0,
-        y: 0
-    });
-
-    legend.call(Drawing.setClipUrl, clipId);
+    scrollBox.call(Drawing.setClipUrl, clipId);
 
     // If scrollbar should be shown.
-    if(opts.height - scrollheight > 0 && !gd._context.staticPlot) {
+    if(opts.height - legendHeight > 0 && !gd._context.staticPlot) {
 
+        // increase the background and clip-path width
+        // by the scrollbar width and margin
         bg.attr({
-            width: opts.width - 2 * opts.borderwidth + constants.scrollBarWidth
+            width: opts.width -
+                2 * opts.borderwidth +
+                constants.scrollBarWidth +
+                constants.scrollBarMargin
         });
 
-        clipPath.attr({
-            width: opts.width + constants.scrollBarWidth
+        clipPath.select('rect').attr({
+            width: opts.width -
+                2 * opts.borderwidth +
+                constants.scrollBarWidth +
+                constants.scrollBarMargin
         });
 
         if(gd.firstRender) {
             // Move scrollbar to starting position
-            scrollBar.call(
-                Drawing.setRect,
-                opts.width - (constants.scrollBarWidth + constants.scrollBarMargin),
-                constants.scrollBarMargin,
-                constants.scrollBarWidth,
-                constants.scrollBarHeight
-            );
-            scrollBox.attr('data-scroll',0);
+            scrollHandler(constants.scrollBarMargin, 0);
         }
 
-        scrollHandler(0,scrollheight);
+        var scrollBarYMax = legendHeight -
+                constants.scrollBarHeight -
+                2 * constants.scrollBarMargin,
+            scrollBoxYMax = opts.height - legendHeight,
+            scrollBarY = constants.scrollBarMargin,
+            scrollBoxY = 0;
+
+        scrollHandler(scrollBarY, scrollBoxY);
 
         legend.on('wheel',null);
-
         legend.on('wheel', function() {
-            var e = d3.event;
-            e.preventDefault();
-            scrollHandler(e.deltaY / 20, scrollheight);
+            scrollBoxY = Lib.constrain(
+                scrollBox.attr('data-scroll') -
+                    d3.event.deltaY / scrollBarYMax * scrollBoxYMax,
+                -scrollBoxYMax, 0);
+            scrollBarY = constants.scrollBarMargin -
+                scrollBoxY / scrollBoxYMax * scrollBarYMax;
+            scrollHandler(scrollBarY, scrollBoxY);
+            d3.event.preventDefault();
         });
 
         scrollBar.on('.drag',null);
         scrollBox.on('.drag',null);
-        var drag = d3.behavior.drag()
-            .on('drag', function() {
-                scrollHandler(d3.event.dy, scrollheight);
-            });
+        var drag = d3.behavior.drag().on('drag', function() {
+            scrollBarY = Lib.constrain(
+                d3.event.y - constants.scrollBarHeight / 2,
+                constants.scrollBarMargin,
+                constants.scrollBarMargin + scrollBarYMax);
+            scrollBoxY = - (scrollBarY - constants.scrollBarMargin) /
+                scrollBarYMax * scrollBoxYMax;
+            scrollHandler(scrollBarY, scrollBoxY);
+        });
 
         scrollBar.call(drag);
         scrollBox.call(drag);
@@ -269,57 +311,45 @@ module.exports = function draw(gd) {
     }
 
 
-    function scrollHandler(delta, scrollheight) {
-
-        var scrollBarTrack = scrollheight - constants.scrollBarHeight - 2 * constants.scrollBarMargin,
-            translateY = scrollBox.attr('data-scroll'),
-            scrollBoxY = Lib.constrain(translateY - delta, scrollheight-opts.height, 0),
-            scrollBarY = -scrollBoxY / (opts.height - scrollheight) * scrollBarTrack + constants.scrollBarMargin;
-
+    function scrollHandler(scrollBarY, scrollBoxY) {
         scrollBox.attr('data-scroll', scrollBoxY);
         scrollBox.attr('transform', 'translate(0, ' + scrollBoxY + ')');
         scrollBar.call(
             Drawing.setRect,
-            opts.width - (constants.scrollBarWidth + constants.scrollBarMargin),
+            opts.width,
             scrollBarY,
             constants.scrollBarWidth,
             constants.scrollBarHeight
         );
+        clipPath.select('rect').attr({
+            y: opts.borderwidth - scrollBoxY
+        });
     }
 
     if(gd._context.editable) {
-        var xf,
-            yf,
-            x0,
-            y0,
-            lw,
-            lh;
+        var xf, yf, x0, y0;
+
+        legend.classed('cursor-move', true);
 
         dragElement.init({
             element: legend.node(),
             prepFn: function() {
-                x0 = Number(legend.attr('x'));
-                y0 = Number(legend.attr('y'));
-                lw = Number(legend.attr('width'));
-                lh = Number(legend.attr('height'));
-                setCursor(legend);
+                var transform = Lib.getTranslate(legend);
+
+                x0 = transform.x;
+                y0 = transform.y;
             },
             moveFn: function(dx, dy) {
-                var gs = gd._fullLayout._size;
+                var newX = x0 + dx,
+                    newY = y0 + dy;
 
-                legend.call(Drawing.setPosition, x0+dx, y0+dy);
+                var transform = 'translate(' + newX + ', ' + newY + ')';
+                legend.attr('transform', transform);
 
-                xf = dragElement.align(x0+dx, lw, gs.l, gs.l+gs.w,
-                    opts.xanchor);
-                yf = dragElement.align(y0+dy+lh, -lh, gs.t+gs.h, gs.t,
-                    opts.yanchor);
-
-                var csr = dragElement.getCursor(xf, yf,
-                    opts.xanchor, opts.yanchor);
-                setCursor(legend, csr);
+                xf = dragElement.align(newX, 0, gs.l, gs.l+gs.w, opts.xanchor);
+                yf = dragElement.align(newY, 0, gs.t+gs.h, gs.t, opts.yanchor);
             },
             doneFn: function(dragged) {
-                setCursor(legend);
                 if(dragged && xf !== undefined && yf !== undefined) {
                     Plotly.relayout(gd, {'legend.x': xf, 'legend.y': yf});
                 }
@@ -350,7 +380,10 @@ function drawTexts(context, gd, d, i, traces) {
 
     function textLayout(s) {
         Plotly.util.convertToTspans(s, function() {
-            if(gd.firstRender) repositionLegend(gd, traces);
+            if(gd.firstRender) {
+                computeLegendDimensions(gd, traces);
+                expandMargin(gd);
+            }
         });
         s.selectAll('tspan.line').attr({x: s.attr('x')});
     }
@@ -369,9 +402,8 @@ function drawTexts(context, gd, d, i, traces) {
     else text.call(textLayout);
 }
 
-function repositionLegend(gd, traces) {
+function computeLegendDimensions(gd, traces) {
     var fullLayout = gd._fullLayout,
-        gs = fullLayout._size,
         opts = fullLayout.legend,
         borderwidth = opts.borderwidth;
 
@@ -423,7 +455,6 @@ function repositionLegend(gd, traces) {
         opts.width = Math.max(opts.width, tWidth || 0);
     });
 
-
     opts.width += 45 + borderwidth * 2;
     opts.height += 10 + borderwidth * 2;
 
@@ -434,40 +465,30 @@ function repositionLegend(gd, traces) {
     traces.selectAll('.legendtoggle')
         .attr('width', (gd._context.editable ? 0 : opts.width) + 40);
 
-    // now position the legend. for both x,y the positions are recorded as
-    // fractions of the plot area (left, bottom = 0,0). Outside the plot
-    // area is allowed but position will be clipped to the page.
-    // values <1/3 align the low side at that fraction, 1/3-2/3 align the
-    // center at that fraction, >2/3 align the right at that fraction
+    // make sure we're only getting full pixels
+    opts.width = Math.ceil(opts.width);
+    opts.height = Math.ceil(opts.height);
+}
 
-    var lx = gs.l + gs.w * opts.x,
-        ly = gs.t + gs.h * (1-opts.y);
+function expandMargin(gd) {
+    var fullLayout = gd._fullLayout,
+        opts = fullLayout.legend;
 
     var xanchor = 'left';
     if(anchorUtils.isRightAnchor(opts)) {
-        lx -= opts.width;
         xanchor = 'right';
     }
-    if(anchorUtils.isCenterAnchor(opts)) {
-        lx -= opts.width / 2;
+    else if(anchorUtils.isCenterAnchor(opts)) {
         xanchor = 'center';
     }
 
     var yanchor = 'top';
     if(anchorUtils.isBottomAnchor(opts)) {
-        ly -= opts.height;
         yanchor = 'bottom';
     }
-    if(anchorUtils.isMiddleAnchor(opts)) {
-        ly -= opts.height / 2;
+    else if(anchorUtils.isMiddleAnchor(opts)) {
         yanchor = 'middle';
     }
-
-    // make sure we're only getting full pixels
-    opts.width = Math.ceil(opts.width);
-    opts.height = Math.ceil(opts.height);
-    lx = Math.round(lx);
-    ly = Math.round(ly);
 
     // lastly check if the margin auto-expand has changed
     Plots.autoMargin(gd, 'legend', {
@@ -477,5 +498,28 @@ function repositionLegend(gd, traces) {
         r: opts.width * ({left: 1, center: 0.5}[xanchor] || 0),
         b: opts.height * ({top: 1, middle: 0.5}[yanchor] || 0),
         t: opts.height * ({bottom: 1, middle: 0.5}[yanchor] || 0)
+    });
+}
+
+function expandHorizontalMargin(gd) {
+    var fullLayout = gd._fullLayout,
+        opts = fullLayout.legend;
+
+    var xanchor = 'left';
+    if(anchorUtils.isRightAnchor(opts)) {
+        xanchor = 'right';
+    }
+    else if(anchorUtils.isCenterAnchor(opts)) {
+        xanchor = 'center';
+    }
+
+    // lastly check if the margin auto-expand has changed
+    Plots.autoMargin(gd, 'legend', {
+        x: opts.x,
+        y: 0.5,
+        l: opts.width * ({right: 1, center: 0.5}[xanchor] || 0),
+        r: opts.width * ({left: 1, center: 0.5}[xanchor] || 0),
+        b: 0,
+        t: 0
     });
 }
