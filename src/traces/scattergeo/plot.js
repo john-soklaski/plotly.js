@@ -244,7 +244,7 @@ plotScatterGeo.style = function(geo) {
 function makeCleanHoverLabelsFunc(geo, trace) {
     var hoverinfo = trace.hoverinfo;
 
-    if(hoverinfo === 'none') {
+    if(hoverinfo === 'none' || hoverinfo === 'hide') {
         return function cleanHoverLabelsFunc(d) { delete d.textLabel; };
     }
 

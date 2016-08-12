@@ -309,7 +309,24 @@ describe('hover info', function() {
             Plotly.plot(createGraphDiv(), mockCopy.data, mockCopy.layout).then(done);
         });
 
-        it('does not render if hover is set to none', function() {
+        it('does not hover if hover info is set to none', function() {
+            var gd = document.getElementById('graph');
+            Fx.hover('graph', evt, 'xy');
+
+            expect(gd._hoverdata, undefined);
+        });
+    });
+
+    describe('hover info hide', function() {
+        var mockCopy = Lib.extendDeep({}, mock);
+
+        mockCopy.data[0].hoverinfo = 'hide';
+
+        beforeEach(function(done) {
+            Plotly.plot(createGraphDiv(), mockCopy.data, mockCopy.layout).then(done);
+        });
+
+        it('does not render if hover is set to hide', function() {
             var gd = document.getElementById('graph');
             Fx.hover('graph', evt, 'xy');
 

@@ -72,7 +72,7 @@ module.exports = {
         valType: 'flaglist',
         role: 'info',
         flags: ['x', 'y', 'z', 'text', 'name'],
-        extras: ['all', 'none'],
+        extras: ['all', 'none', 'hide'],
         dflt: 'all',
         description: 'Determines which trace information appear on hover.'
     },

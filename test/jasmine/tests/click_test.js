@@ -83,7 +83,7 @@ describe('Test click interactions:', function() {
     });
 
     describe('click event with hoverinfo set to none - plotly_click', function() {
-        var futureData;
+        var futureData = null;
 
         beforeEach(function(done) {
 
@@ -97,7 +97,49 @@ describe('Test click interactions:', function() {
             });
         });
 
-        it('should contain the correct fields despite hoverinfo: "none"', function() {
+        it('should not register the hover', function() {
+            click(pointPos[0], pointPos[1]);
+            expect(futureData).toEqual(null);
+        });
+    });
+
+    describe('click events with hoverinfo set to none - plotly_hover', function() {
+        var futureData = null;
+
+        beforeEach(function(done) {
+
+            var modifiedMockCopy = Lib.extendDeep({}, mockCopy);
+            modifiedMockCopy.data[0].hoverinfo = 'none';
+            Plotly.plot(gd, modifiedMockCopy.data, modifiedMockCopy.layout)
+                .then(done);
+
+            gd.on('plotly_hover', function(data) {
+                futureData = data;
+            });
+        });
+
+        it('should not register the click', function() {
+            click(pointPos[0], pointPos[1]);
+            expect(futureData).toEqual(null);
+        });
+    });
+
+    describe('click event with hoverinfo set to hide - plotly_click', function() {
+        var futureData;
+
+        beforeEach(function(done) {
+
+            var modifiedMockCopy = Lib.extendDeep({}, mockCopy);
+            modifiedMockCopy.data[0].hoverinfo = 'hide';
+            Plotly.plot(gd, modifiedMockCopy.data, modifiedMockCopy.layout)
+                .then(done);
+
+            gd.on('plotly_click', function(data) {
+                futureData = data;
+            });
+        });
+
+        it('should contain the correct fields despite hoverinfo: "hide"', function() {
             click(pointPos[0], pointPos[1]);
             expect(futureData.points.length).toEqual(1);
 
@@ -113,13 +155,13 @@ describe('Test click interactions:', function() {
         });
     });
 
-    describe('click events with hoverinfo set to none - plotly_hover', function() {
+    describe('click events with hoverinfo set to hide - plotly_hover', function() {
         var futureData;
 
         beforeEach(function(done) {
 
             var modifiedMockCopy = Lib.extendDeep({}, mockCopy);
-            modifiedMockCopy.data[0].hoverinfo = 'none';
+            modifiedMockCopy.data[0].hoverinfo = 'hide';
             Plotly.plot(gd, modifiedMockCopy.data, modifiedMockCopy.layout)
                 .then(done);
 
@@ -128,7 +170,7 @@ describe('Test click interactions:', function() {
             });
         });
 
-        it('should contain the correct fields despite hoverinfo: "none"', function() {
+        it('should contain the correct fields despite hoverinfo: "hide"', function() {
             click(pointPos[0], pointPos[1]);
             expect(futureData.points.length).toEqual(1);
 
