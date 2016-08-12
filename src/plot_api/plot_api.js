@@ -20,17 +20,20 @@ var Queue = require('../lib/queue');
 
 var Plots = require('../plots/plots');
 var Fx = require('../plots/cartesian/graph_interact');
+var Polar = require('../plots/polar');
 
 var Color = require('../components/color');
 var Drawing = require('../components/drawing');
 var ErrorBars = require('../components/errorbars');
+var Annotations = require('../components/annotations');
 var Images = require('../components/images');
 var Legend = require('../components/legend');
 var RangeSlider = require('../components/rangeslider');
 var RangeSelector = require('../components/rangeselector');
+var UpdateMenus = require('../components/updatemenus');
 var Shapes = require('../components/shapes');
 var Titles = require('../components/titles');
-var manageModeBar = require('../components/modebar/manage');
+var ModeBar = require('../components/modebar');
 var xmlnsNamespaces = require('../constants/xmlns_namespaces');
 
 
@@ -180,6 +183,7 @@ Plotly.plot = function(gd, data, layout, config) {
 
         Legend.draw(gd);
         RangeSelector.draw(gd);
+        UpdateMenus.draw(gd);
 
         for(i = 0; i < calcdata.length; i++) {
             cd = calcdata[i];
@@ -229,7 +233,7 @@ Plotly.plot = function(gd, data, layout, config) {
         // TODO: autosize extra for text markers
         return Lib.syncOrAsync([
             Shapes.calcAutorange,
-            Plotly.Annotations.calcAutorange,
+            Annotations.calcAutorange,
             doAutoRange
         ], gd);
     }
@@ -281,8 +285,8 @@ Plotly.plot = function(gd, data, layout, config) {
         Plots.style(gd);
 
         // show annotations and shapes
-        Shapes.drawAll(gd);
-        Plotly.Annotations.drawAll(gd);
+        Shapes.draw(gd);
+        Annotations.draw(gd);
 
         // source links
         Plots.addLinks(gd);
@@ -297,12 +301,13 @@ Plotly.plot = function(gd, data, layout, config) {
     // correctly sized and the whole plot re-margined. gd._replotting must
     // be set to false before these will work properly.
     function finalDraw() {
-        Shapes.drawAll(gd);
+        Shapes.draw(gd);
         Images.draw(gd);
-        Plotly.Annotations.drawAll(gd);
+        Annotations.draw(gd);
         Legend.draw(gd);
         RangeSlider.draw(gd);
         RangeSelector.draw(gd);
+        UpdateMenus.draw(gd);
     }
 
     function cleanUp() {
@@ -349,6 +354,15 @@ function getGraphDiv(gd) {
     }
 
     return gd;  // otherwise assume that gd is a DOM element
+}
+
+// clear the promise queue if one of them got rejected
+function clearPromiseQueue(gd) {
+    if(Array.isArray(gd._promises) && gd._promises.length > 0) {
+        Lib.log('Clearing previous rejected promises from queue.');
+    }
+
+    gd._promises = [];
 }
 
 function opaqueSetBackground(gd, bgColor) {
@@ -407,7 +421,7 @@ function plotPolar(gd, data, layout) {
     // fulfill gd requirements
     if(data) gd.data = data;
     if(layout) gd.layout = layout;
-    Plotly.micropolar.manager.fillLayout(gd);
+    Polar.manager.fillLayout(gd);
 
     if(gd._fullLayout.autosize === 'initial' && gd._context.autosizable) {
         plotAutoSize(gd, {});
@@ -420,7 +434,7 @@ function plotPolar(gd, data, layout) {
     });
 
     // instantiate framework
-    gd.framework = Plotly.micropolar.manager.framework(gd);
+    gd.framework = Polar.manager.framework(gd);
 
     // plot
     gd.framework({data: gd.data, layout: gd.layout}, paperDiv.node());
@@ -835,6 +849,10 @@ Plotly.redraw = function(gd) {
  */
 Plotly.newPlot = function(gd, data, layout, config) {
     gd = getGraphDiv(gd);
+
+    // remove gl contexts
+    Plots.cleanPlot([], {}, gd._fullData || {}, gd._fullLayout || {});
+
     Plots.purge(gd);
     return Plotly.plot(gd, data, layout, config);
 };
@@ -842,9 +860,8 @@ Plotly.newPlot = function(gd, data, layout, config) {
 function doCalcdata(gd) {
     var axList = Plotly.Axes.list(gd),
         fullData = gd._fullData,
-        fullLayout = gd._fullLayout;
-
-    var i, trace, module, cd;
+        fullLayout = gd._fullLayout,
+        i;
 
     var calcdata = gd.calcdata = new Array(fullData.length);
 
@@ -870,12 +887,12 @@ function doCalcdata(gd) {
     }
 
     for(i = 0; i < fullData.length; i++) {
-        trace = fullData[i];
-        module = trace._module;
-        cd = [];
+        var trace = fullData[i],
+            _module = trace._module,
+            cd = [];
 
-        if(module && trace.visible === true) {
-            if(module.calc) cd = module.calc(gd, trace);
+        if(_module && trace.visible === true) {
+            if(_module.calc) cd = _module.calc(gd, trace);
         }
 
         // make sure there is a first point
@@ -1259,9 +1276,7 @@ Plotly.extendTraces = function extendTraces(gd, update, indices, maxPoints) {
     var promise = Plotly.redraw(gd);
 
     var undoArgs = [gd, undo.update, indices, undo.maxPoints];
-    if(Queue) {
-        Queue.add(gd, Plotly.prependTraces, undoArgs, extendTraces, arguments);
-    }
+    Queue.add(gd, Plotly.prependTraces, undoArgs, extendTraces, arguments);
 
     return promise;
 };
@@ -1288,9 +1303,7 @@ Plotly.prependTraces = function prependTraces(gd, update, indices, maxPoints) {
     var promise = Plotly.redraw(gd);
 
     var undoArgs = [gd, undo.update, indices, undo.maxPoints];
-    if(Queue) {
-        Queue.add(gd, Plotly.extendTraces, undoArgs, prependTraces, arguments);
-    }
+    Queue.add(gd, Plotly.extendTraces, undoArgs, prependTraces, arguments);
 
     return promise;
 };
@@ -1338,7 +1351,7 @@ Plotly.addTraces = function addTraces(gd, traces, newIndices) {
     // i.e., we can simply redraw and be done
     if(typeof newIndices === 'undefined') {
         promise = Plotly.redraw(gd);
-        if(Queue) Queue.add(gd, undoFunc, undoArgs, redoFunc, redoArgs);
+        Queue.add(gd, undoFunc, undoArgs, redoFunc, redoArgs);
         return promise;
     }
 
@@ -1361,10 +1374,10 @@ Plotly.addTraces = function addTraces(gd, traces, newIndices) {
 
     // if we're here, the user has defined specific places to place the new traces
     // this requires some extra work that moveTraces will do
-    if(Queue) Queue.startSequence(gd);
-    if(Queue) Queue.add(gd, undoFunc, undoArgs, redoFunc, redoArgs);
+    Queue.startSequence(gd);
+    Queue.add(gd, undoFunc, undoArgs, redoFunc, redoArgs);
     promise = Plotly.moveTraces(gd, currentIndices, newIndices);
-    if(Queue) Queue.stopSequence(gd);
+    Queue.stopSequence(gd);
     return promise;
 };
 
@@ -1405,8 +1418,7 @@ Plotly.deleteTraces = function deleteTraces(gd, indices) {
     }
 
     var promise = Plotly.redraw(gd);
-
-    if(Queue) Queue.add(gd, undoFunc, undoArgs, redoFunc, redoArgs);
+    Queue.add(gd, undoFunc, undoArgs, redoFunc, redoArgs);
 
     return promise;
 };
@@ -1504,8 +1516,7 @@ Plotly.moveTraces = function moveTraces(gd, currentIndices, newIndices) {
     gd.data = newData;
 
     var promise = Plotly.redraw(gd);
-
-    if(Queue) Queue.add(gd, undoFunc, undoArgs, redoFunc, redoArgs);
+    Queue.add(gd, undoFunc, undoArgs, redoFunc, redoArgs);
 
     return promise;
 };
@@ -1535,6 +1546,7 @@ Plotly.moveTraces = function moveTraces(gd, currentIndices, newIndices) {
 // style files that want to specify cyclical default values).
 Plotly.restyle = function restyle(gd, astr, val, traces) {
     gd = getGraphDiv(gd);
+    clearPromiseQueue(gd);
 
     var i, fullLayout = gd._fullLayout,
         aobj = {};
@@ -1553,7 +1565,7 @@ Plotly.restyle = function restyle(gd, astr, val, traces) {
 
     if(isNumeric(traces)) traces = [traces];
     else if(!Array.isArray(traces) || !traces.length) {
-        traces = gd._fullData.map(function(v, i) { return i; });
+        traces = gd.data.map(function(v, i) { return i; });
     }
 
     // recalcAttrs attributes need a full regeneration of calcdata
@@ -1590,7 +1602,9 @@ Plotly.restyle = function restyle(gd, astr, val, traces) {
         'outsidetextfont.size', 'outsidetextfont.family', 'outsidetextfont.color',
         'hole', 'scalegroup', 'domain', 'domain.x', 'domain.y',
         'domain.x[0]', 'domain.x[1]', 'domain.y[0]', 'domain.y[1]',
-        'tilt', 'tiltaxis', 'depth', 'direction', 'rotation', 'pull'
+        'tilt', 'tiltaxis', 'depth', 'direction', 'rotation', 'pull',
+        'line.showscale', 'line.cauto', 'line.autocolorscale', 'line.reversescale',
+        'marker.line.showscale', 'marker.line.cauto', 'marker.line.autocolorscale', 'marker.line.reversescale'
     ];
     for(i = 0; i < traces.length; i++) {
         if(Plots.traceIs(gd._fullData[traces[i]], 'box')) {
@@ -1612,6 +1626,8 @@ Plotly.restyle = function restyle(gd, astr, val, traces) {
     var replotAttrs = [
         'zmin', 'zmax', 'zauto',
         'marker.cmin', 'marker.cmax', 'marker.cauto',
+        'line.cmin', 'line.cmax',
+        'marker.line.cmin', 'marker.line.cmax',
         'contours.start', 'contours.end', 'contours.size',
         'contours.showlines',
         'line', 'line.smoothing', 'line.shape',
@@ -1652,7 +1668,7 @@ Plotly.restyle = function restyle(gd, astr, val, traces) {
     // to not go through a full replot
     var doPlotWhiteList = ['cartesian', 'pie', 'ternary'];
     fullLayout._basePlotModules.forEach(function(_module) {
-        if(doPlotWhiteList.indexOf(_module.name) === -1) doplot = true;
+        if(doPlotWhiteList.indexOf(_module.name) === -1) docalc = true;
     });
 
     // make a new empty vals array for undoit
@@ -1724,6 +1740,9 @@ Plotly.restyle = function restyle(gd, astr, val, traces) {
             continue;
         }
 
+        // take no chances on transforms
+        if(ai.substr(0, 10) === 'transforms') docalc = true;
+
         // set attribute in gd.data
         undoit[ai] = a0();
         for(i = 0; i < traces.length; i++) {
@@ -1732,6 +1751,8 @@ Plotly.restyle = function restyle(gd, astr, val, traces) {
             param = Lib.nestedProperty(cont, ai);
             oldVal = param.get();
             newVal = Array.isArray(vi) ? vi[i % vi.length] : vi;
+
+            if(newVal === undefined) continue;
 
             // setting bin or z settings should turn off auto
             // and setting auto should save bin or z settings
@@ -1947,9 +1968,7 @@ Plotly.restyle = function restyle(gd, astr, val, traces) {
 
     // now all attribute mods are done, as are redo and undo
     // so we can save them
-    if(Queue) {
-        Queue.add(gd, restyle, [gd, undoit, traces], restyle, [gd, redoit, traces]);
-    }
+    Queue.add(gd, restyle, [gd, undoit, traces], restyle, [gd, redoit, traces]);
 
     // do we need to force a recalc?
     var autorangeOn = false;
@@ -2025,7 +2044,7 @@ Plotly.restyle = function restyle(gd, astr, val, traces) {
     if(!plotDone || !plotDone.then) plotDone = Promise.resolve();
 
     return plotDone.then(function() {
-        gd.emit('plotly_restyle', Lib.extendDeep([], [redoit, traces]));
+        gd.emit('plotly_restyle', Lib.extendDeepNoArrays([], [redoit, traces]));
         return gd;
     });
 };
@@ -2070,6 +2089,7 @@ function swapXYData(trace) {
 //          allows setting multiple attributes simultaneously
 Plotly.relayout = function relayout(gd, astr, val) {
     gd = getGraphDiv(gd);
+    clearPromiseQueue(gd);
 
     if(gd.framework && gd.framework.isPolar) {
         return Promise.resolve(gd);
@@ -2164,7 +2184,10 @@ Plotly.relayout = function relayout(gd, astr, val) {
             // trunk nodes (everything except the leaf)
             ptrunk = p.parts.slice(0, pend).join('.'),
             parentIn = Lib.nestedProperty(gd.layout, ptrunk).get(),
-            parentFull = Lib.nestedProperty(fullLayout, ptrunk).get();
+            parentFull = Lib.nestedProperty(fullLayout, ptrunk).get(),
+            diff;
+
+        if(vi === undefined) continue;
 
         redoit[ai] = vi;
 
@@ -2288,7 +2311,7 @@ Plotly.relayout = function relayout(gd, astr, val) {
             }
             // TODO: combine all edits to a given annotation / shape into one call
             // as it is we get separate calls for x and y (or ax and ay) on move
-            objModule.draw(gd, objNum, p.parts.slice(2).join('.'), aobj[ai]);
+            objModule.drawOne(gd, objNum, p.parts.slice(2).join('.'), aobj[ai]);
             delete aobj[ai];
         }
         else if(p.parts[0] === 'images') {
@@ -2297,6 +2320,28 @@ Plotly.relayout = function relayout(gd, astr, val) {
 
             Images.supplyLayoutDefaults(gd.layout, gd._fullLayout);
             Images.draw(gd);
+        }
+        else if(p.parts[0] === 'mapbox' && p.parts[1] === 'layers') {
+            Lib.extendDeepAll(gd.layout, Lib.objectFromPath(ai, vi));
+
+            // append empty container to mapbox.layers
+            // so that relinkPrivateKeys does not complain
+
+            var fullLayers = (gd._fullLayout.mapbox || {}).layers || [];
+            diff = (p.parts[2] + 1) - fullLayers.length;
+
+            for(i = 0; i < diff; i++) fullLayers.push({});
+
+            doplot = true;
+        }
+        else if(p.parts[0] === 'updatemenus') {
+            Lib.extendDeepAll(gd.layout, Lib.objectFromPath(ai, vi));
+
+            var menus = gd._fullLayout.updatemenus || [];
+            diff = (p.parts[2] + 1) - menus.length;
+
+            for(i = 0; i < diff; i++) menus.push({});
+            doplot = true;
         }
         // alter gd.layout
         else {
@@ -2354,9 +2399,7 @@ Plotly.relayout = function relayout(gd, astr, val) {
     }
     // now all attribute mods are done, as are
     // redo and undo so we can save them
-    if(Queue) {
-        Queue.add(gd, relayout, [gd, undoit], relayout, [gd, redoit]);
-    }
+    Queue.add(gd, relayout, [gd, undoit], relayout, [gd, redoit]);
 
     // calculate autosizing - if size hasn't changed,
     // will remove h&w so we don't need to redraw
@@ -2406,7 +2449,10 @@ Plotly.relayout = function relayout(gd, astr, val) {
         // this is decoupled enough it doesn't need async regardless
         if(domodebar) {
             var subplotIds;
-            manageModeBar(gd);
+            ModeBar.manage(gd);
+
+            Plotly.Fx.supplyLayoutDefaults(gd.layout, fullLayout, gd._fullData);
+            Plotly.Fx.init(gd);
 
             subplotIds = Plots.getSubplotIds(fullLayout, 'gl3d');
             for(i = 0; i < subplotIds.length; i++) {
@@ -3052,7 +3098,7 @@ function lsInner(gd) {
 
     drawMainTitle(gd);
 
-    manageModeBar(gd);
+    ModeBar.manage(gd);
 
     return gd._promises.length && Promise.all(gd._promises);
 }

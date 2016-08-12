@@ -8,10 +8,10 @@
 
 'use strict';
 
-var Lib = require('../lib');
+/* eslint-disable no-console */
 
 /**
- * This will be transfered over to gd and overridden by
+ * This will be transferred over to gd and overridden by
  * config args to Plotly.plot.
  *
  * The defaults are the appropriate settings for plotly.js,
@@ -25,6 +25,9 @@ module.exports = {
 
     // we can edit titles, move annotations, etc
     editable: false,
+
+    // set the length of the undo/redo queue
+    queueLength: 0,
 
     // plot will respect layout.autosize=true and infer its container size
     autosizable: false,
@@ -86,16 +89,23 @@ module.exports = {
     // URL to topojson files used in geo charts
     topojsonURL: 'https://cdn.plot.ly/',
 
+    // Mapbox access token (required to plot mapbox trace types)
+    mapboxAccessToken: null,
+
     // Turn all console logging on or off (errors will be thrown)
     // This should ONLY be set via Plotly.setPlotConfig
     logging: false
 };
 
 // where and how the background gets set can be overridden by context
-// so we define the default (plotlyjs) behavior here
+// so we define the default (plotly.js) behavior here
 function defaultSetBackground(gd, bgColor) {
     try {
         gd._fullLayout._paper.style('background', bgColor);
     }
-    catch(e) { Lib.error(e); }
+    catch(e) {
+        if(module.exports.logging > 0) {
+            console.error(e);
+        }
+    }
 }

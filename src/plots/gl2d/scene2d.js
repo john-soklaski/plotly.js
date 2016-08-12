@@ -18,7 +18,7 @@ var createSelectBox = require('gl-select-box');
 
 var createOptions = require('./convert');
 var createCamera = require('./camera');
-var htmlToUnicode = require('../../lib/html2unicode');
+var convertHTMLToUnicode = require('../../lib/html2unicode');
 var showNoWebGlMsg = require('../../lib/show_no_webgl_msg');
 
 var AXES = ['xaxis', 'yaxis'];
@@ -231,7 +231,7 @@ proto.computeTickMarks = function() {
         for(var i = 0; i < nextTicks[j].length; ++i) {
             // TODO add support for '\n' in gl-plot2d,
             // For now, replace '\n' with ' '
-            nextTicks[j][i].text = htmlToUnicode(nextTicks[j][i].text + '').replace(/\n/g, ' ');
+            nextTicks[j][i].text = convertHTMLToUnicode(nextTicks[j][i].text + '').replace(/\n/g, ' ');
         }
     }
 
@@ -310,6 +310,16 @@ proto.cameraChanged = function() {
 };
 
 proto.destroy = function() {
+
+    var traces = this.traces;
+
+    if(traces) {
+        Object.keys(traces).map(function(key) {
+            traces[key].dispose();
+            delete traces[key];
+        });
+    }
+
     this.glplot.dispose();
 
     if(!this.staticPlot) this.container.removeChild(this.canvas);
@@ -473,11 +483,15 @@ proto.draw = function() {
 
             if(nextSelection && (
                 !this.lastPickResult ||
-                this.lastPickResult.trace !== nextSelection.trace ||
+                this.lastPickResult.traceUid !== nextSelection.trace.uid ||
                 this.lastPickResult.dataCoord[0] !== nextSelection.dataCoord[0] ||
                 this.lastPickResult.dataCoord[1] !== nextSelection.dataCoord[1])
             ) {
-                var selection = this.lastPickResult = nextSelection;
+                var selection = nextSelection;
+                this.lastPickResult = {
+                    traceUid: nextSelection.trace ? nextSelection.trace.uid : null,
+                    dataCoord: nextSelection.dataCoord.slice()
+                };
                 this.spikes.update({ center: result.dataCoord });
 
                 selection.screenCoord = [
@@ -513,8 +527,6 @@ proto.draw = function() {
                 }, {
                     container: this.svgContainer
                 });
-
-                this.lastPickResult = { dataCoord: result.dataCoord };
             }
         }
         else if(!result && this.lastPickResult) {
