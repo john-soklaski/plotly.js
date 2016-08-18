@@ -159,6 +159,7 @@ module.exports = function draw(gd, id) {
                 tickpadding: opts.tickpadding,
                 tickformat: opts.tickformat,
                 exponentformat: opts.exponentformat,
+                separatethousands: opts.separatethousands,
                 showexponent: opts.showexponent,
                 showtickprefix: opts.showtickprefix,
                 tickprefix: opts.tickprefix,
