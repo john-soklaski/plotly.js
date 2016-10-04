@@ -15,6 +15,7 @@ var lib = module.exports = {};
 
 lib.nestedProperty = require('./nested_property');
 lib.isPlainObject = require('./is_plain_object');
+lib.isArray = require('./is_array');
 
 var coerceModule = require('./coerce');
 lib.valObjects = coerceModule.valObjects;
@@ -22,6 +23,12 @@ lib.coerce = coerceModule.coerce;
 lib.coerce2 = coerceModule.coerce2;
 lib.coerceFont = coerceModule.coerceFont;
 lib.validate = coerceModule.validate;
+lib.isValObject = coerceModule.isValObject;
+lib.crawl = coerceModule.crawl;
+lib.IS_SUBPLOT_OBJ = coerceModule.IS_SUBPLOT_OBJ;
+lib.IS_LINKED_TO_ARRAY = coerceModule.IS_LINKED_TO_ARRAY;
+lib.DEPRECATED = coerceModule.DEPRECATED;
+lib.UNDERSCORE_ATTRS = coerceModule.UNDERSCORE_ATTRS;
 
 var datesModule = require('./dates');
 lib.dateTime2ms = datesModule.dateTime2ms;
@@ -120,6 +127,9 @@ lib.bBoxIntersect = function(a, b, pad) {
 
 // minor convenience/performance booster for d3...
 lib.identity = function(d) { return d; };
+
+// minor convenience helper
+lib.noop = function() {};
 
 // random string generator
 lib.randstr = function randstr(existing, bits, base) {
@@ -571,6 +581,40 @@ lib.objectFromPath = function(path, value) {
     }
 
     return obj;
+};
+
+/**
+ * Iterate through an object in-place, converting dotted properties to objects.
+ *
+ * @example
+ * lib.expandObjectPaths({'nested.test.path': 'value'});
+ * // returns { nested: { test: {path: 'value'}}}
+ */
+
+// Store this to avoid recompiling regex on every prop since this may happen many
+// many times for animations.
+// TODO: Premature optimization? Remove?
+var dottedPropertyRegex = /^([^\.]*)\../;
+
+lib.expandObjectPaths = function(data) {
+    var match, key, prop, datum;
+    if(typeof data === 'object' && !Array.isArray(data)) {
+        for(key in data) {
+            if(data.hasOwnProperty(key)) {
+                if((match = key.match(dottedPropertyRegex))) {
+                    datum = data[key];
+                    prop = match[1];
+
+                    delete data[key];
+
+                    data[prop] = lib.extendDeepNoArrays(data[prop] || {}, lib.objectFromPath(key, lib.expandObjectPaths(datum))[prop]);
+                } else {
+                    data[key] = lib.expandObjectPaths(data[key]);
+                }
+            }
+        }
+    }
+    return data;
 };
 
 /**

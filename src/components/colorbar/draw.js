@@ -14,6 +14,7 @@ var tinycolor = require('tinycolor2');
 
 var Plotly = require('../../plotly');
 var Plots = require('../../plots/plots');
+var Registry = require('../../registry');
 var Axes = require('../../plots/cartesian/axes');
 var dragElement = require('../dragelement');
 var Lib = require('../../lib');
@@ -438,7 +439,7 @@ module.exports = function draw(gd, id) {
         function drawTitle(titleClass, titleOpts) {
             var trace = getTrace(),
                 propName;
-            if(Plots.traceIs(trace, 'markerColorscale')) {
+            if(Registry.traceIs(trace, 'markerColorscale')) {
                 propName = 'marker.colorbar.title';
             }
             else propName = 'colorbar.title';
@@ -527,7 +528,7 @@ module.exports = function draw(gd, id) {
             container.attr('transform',
                 'translate(' + (gs.l - xoffset) + ',' + gs.t + ')');
 
-            //auto margin adjustment
+            // auto margin adjustment
             Plots.autoMargin(gd, id, {
                 x: opts.x,
                 y: opts.y,

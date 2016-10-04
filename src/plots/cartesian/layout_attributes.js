@@ -11,8 +11,6 @@
 var fontAttrs = require('../font_attributes');
 var colorAttrs = require('../../components/color/attributes');
 var extendFlat = require('../../lib/extend').extendFlat;
-var rangeSliderAttrs = require('../../components/rangeslider/attributes');
-var rangeSelectorAttrs = require('../../components/rangeselector/attributes');
 
 var constants = require('./constants');
 
@@ -96,9 +94,6 @@ module.exports = {
             'January 1st 1970 to November 4th, 2013, set the range from 0 to 1380844800000.0'
         ].join(' ')
     },
-
-    rangeslider: rangeSliderAttrs,
-    rangeselector: rangeSelectorAttrs,
 
     fixedrange: {
         valType: 'boolean',
@@ -489,7 +484,7 @@ module.exports = {
         valType: 'enumerated',
         values: [
             'trace', 'category ascending', 'category descending', 'array'
-            /*, 'value ascending', 'value descending'*/ // value ascending / descending to be implemented later
+            /* , 'value ascending', 'value descending'*/ // value ascending / descending to be implemented later
         ],
         dflt: 'trace',
         role: 'info',
@@ -498,7 +493,7 @@ module.exports = {
             'By default, plotly uses *trace*, which specifies the order that is present in the data supplied.',
             'Set `categoryorder` to *category ascending* or *category descending* if order should be determined by',
             'the alphanumerical order of the category names.',
-            /*'Set `categoryorder` to *value ascending* or *value descending* if order should be determined by the',
+            /* 'Set `categoryorder` to *value ascending* or *value descending* if order should be determined by the',
             'numerical order of the values.',*/ // // value ascending / descending to be implemented later
             'Set `categoryorder` to *array* to derive the ordering from the attribute `categoryarray`. If a category',
             'is not found in the `categoryarray` array, the sorting behavior for that attribute will be identical to',
@@ -515,6 +510,10 @@ module.exports = {
         ].join(' ')
     },
 
+    _nestedModules: {
+        'rangeslider': 'rangeslider',
+        'rangeselector': 'rangeselector',
+    },
 
     _deprecated: {
         autotick: {
